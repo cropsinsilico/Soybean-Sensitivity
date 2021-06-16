@@ -6,8 +6,9 @@ plot_contour<-function(x,y,data,var_name,cbar_limit){
     colnames(df) = c("vmax","jmax","z")
     v<-ggplot(df,aes(x=vmax,y=jmax,z=z,fill=z))+geom_contour_filled()+ 
        geom_tile()+
-       geom_contour(color = "black",bins = 15)+ 
-       geom_text_contour(stroke = 0.2,min.size = 2)+
+       #geom_contour(color = "black",bins = 15)+ 
+       #geom_text_contour(stroke = 0.2,min.size = 2)+
+       xlab("vmax")+
        scale_fill_distiller(name=var_name,palette = "Spectral",limits = cbar_limit)+
        theme(axis.text=element_text(size=14),
              axis.title=element_text(size=14,face="bold"),
@@ -39,18 +40,38 @@ barplot<-function(df,pdfname){
    df <- within(df, CO2 <- factor(CO2,levels=names(sort(table(CO2),decreasing=FALSE))))
    CO2_label = paste(unique(df$CO2),"ppm")
    plot_list = list()
-   ynames = c("pod","shoot","A_dmax","A_dmean","A_sum")
+   ynames = colnames(df)[-c(1,2)]#remove year and CO2 
    ylimit = c(0,10)
+   text_size = 24
    for (i in 1:length(ynames)){
-   p <- ggplot(data=df, aes_string(x="year", y=ynames[i], fill="CO2")) +
+   df_tmp = df[,c(1,2,i+2)]
+   df_with_sd = cbind(df_tmp[1,],sd=NaN) #init the target df 
+   for(CO2 in unique(df$CO2)){
+      df_tmp2 = df_tmp[df_tmp$CO2==CO2,]
+      df_mean = mean(df_tmp2[,3])
+      df_sd   = sd(df_tmp2[,3])
+      tmp = cbind(df_tmp2[1,c(1,2)],df_mean,df_sd)
+      colnames(tmp) = colnames(df_with_sd)
+      df_with_sd = rbind(df_with_sd,tmp)
+   }
+   df_with_sd = df_with_sd[-1,]
+   p <- ggplot(data=df_with_sd, aes_string(x="year", y=ynames[i], fill="CO2")) +
          geom_bar(stat="identity", position=position_dodge())+
+         geom_errorbar(aes_string(ymin=ynames[i], ymax=paste0(ynames[i],"+sd")), width=.2,position=position_dodge(.9))+
           coord_cartesian(ylim = ylimit)+
-          theme(axis.text=element_text(size=14),
-           axis.title=element_text(size=14,face="bold"),
-           legend.text=element_text(size=14),
-           legend.title=element_text(size=14))
+          theme(axis.text=element_text(size=text_size),
+           axis.title=element_text(size=text_size,face="bold"),
+           axis.title.x=element_blank(),
+           axis.text.x =element_blank(),
+           axis.ticks.x=element_blank(),
+           legend.position = c(.85, .85),
+           legend.text     = element_text(size=text_size),
+           legend.title    = element_text(size=text_size))
    # Use custom colors
    p <- p + scale_fill_manual(values=c('blue','green','orange','grey'),labels = CO2_label)
+
+   if(i>1) p <- p + guides(fill=FALSE, color=FALSE) #remove legends
+
    plot_list[[i]] = p
    }
    pdf(pdfname,height = 16, width=24)

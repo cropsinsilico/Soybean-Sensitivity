@@ -13,10 +13,13 @@ options(warn=-1)
 path.figs <- './figs/'
 dir.create(path = path.figs, showWarnings = FALSE)
 
-years <- '2002'#c('2002','2004','2005','2006')
+#years <- c('2002','2004','2005','2006')
+years = 2006:2015
+sow_day     =   150 
+harvest_day =   280
 
 # sowing and harvest DOYs for each growing season
-dates <- data.frame("year" = c(2002, 2004:2006),"sow" = c(152,149,148,148), "harvest" = c(288, 289, 270, 270))
+dates <- data.frame("year" = years,"sow" = sow_day, "harvest" = harvest_day)
 
 # initialize variables
 # results <- list()
@@ -25,26 +28,35 @@ weather.growingseason <- list()
 
 # for partial_gro_solver
 arg_names <- c('Catm') # atmospheric CO2 parameter
-CO2s <- 380#c(380,550,800,1000)
+CO2s <- c(400,600,800,1000)
 solar_threshold = 10 #to get the daytime
 no_layers = 10
 doys = c(180,220,260) #specfic doy to investigate
 #varying vmax & jmax from -50% to +50%
-v_scaler = seq(0.5,1.5,by=0.01) 
-j_scaler = seq(0.5,1.5,by=0.01) 
+varying_step = 0.1
+v_scaler   = seq(0.5,1.5,by=varying_step) 
+j_scaler   = seq(0.5,1.5,by=varying_step) 
+tpu_scaler = seq(0.5,1.5,by=varying_step) 
+convert_rate_Assim = 1/(3600 * 1e-6 * 30 * 1e-6 * 10000) #Mg/ha/hr to umol/m2/s
+convert_rate_Trans = 1/(3600 * 1e-3 * 18 * 1e-6 * 10000) #Mg/ha/hr to mmol/m2/s 
+convert_gs         = 1/1000 #mmol to mol 
 
 soybean_para0 = soybean_parameters
 soybean_para  = soybean_parameters
+print(c("default tpu rate is ",soybean_para$tpu_rate_max))
 #init outputs
 podmass     = array(NaN,c(length(v_scaler),length(j_scaler),length(years),length(doys)))    
 shootmass   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),length(doys)))    
 total_assim = array(NaN,c(length(v_scaler),length(j_scaler),length(years),length(doys)))    
 
-total_assim_dmax = array(NaN,c(length(v_scaler),length(j_scaler),length(years),3)) #mean of daily daytime max,mean & accumulate 
+wue                = array(NaN,c(length(v_scaler),length(j_scaler),length(years))) #umol CO2/ mmol H2O 
+total_assim_dmax   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),3)) #mean of daily daytime max,mean & accumulate 
 layer_assim_sunlit = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers)) 
 layer_assim_shaded = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers)) 
 Ci_sunlit          = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers)) #mean 
 Ci_shaded          = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers)) 
+minA_freq_sunlit   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers,3)) #3 to save FREQs of Ac, Aj & Ap
+minA_freq_shaded   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers,3)) 
 
 for (CO2 in CO2s){
 t0 = Sys.time()
@@ -52,14 +64,17 @@ for (i in 1:length(years)) {
   yr <- years[i]
   print(paste("processing year",yr)) 
 
-  weather <- read.csv(file = paste0('../Data/Weather_data/', yr, '_Bondville_IL_daylength.csv'))
+#  weather <- read.csv(file = paste0('../Data/Weather_data/', yr, '_Bondville_IL_daylength.csv'))
+  weather <- read.csv(file = paste0('./WeatherData/',yr,'/', yr, '_Bondville_IL_daylength.csv'))
 
 #  weather$temp = weather$temp + 2  #mannually change temperature 
 
-  sowdate <- dates$sow[which(dates$year == yr)]
-  harvestdate <- dates$harvest[which(dates$year == yr)]
-  sd.ind <- which(weather$doy == sowdate)[1] # start of sowing day
-  hd.ind <- which(weather$doy == harvestdate)[24] # end of harvest day
+#  sowdate <- dates$sow[which(dates$year == yr)]
+#  harvestdate <- dates$harvest[which(dates$year == yr)]
+#  sd.ind <- which(weather$doy == sowdate)[1] # start of sowing day
+#  hd.ind <- which(weather$doy == harvestdate)[24] # end of harvest day
+  sd.ind <- which(weather$doy == sow_day)[1]      # start of sowing day
+  hd.ind <- which(weather$doy == harvest_day)[24] # end of harvest day
   
   weather.growingseason[[i]] <- weather[sd.ind:hd.ind,]
   solar = weather.growingseason[[i]]$solar 
@@ -69,11 +84,14 @@ for (i in 1:length(years)) {
   for (k in 1:length(v_scaler)){
   	soybean_para$jmax =  soybean_para0$jmax   *  j_scaler[j] 
   	soybean_para$vmax1 = soybean_para0$vmax1  *  v_scaler[k]
+#        soybean_para$tpu_rate_max = soybean_para0$tpu_rate_max * tpu_scaler[k]
   	soybean_solver <- partial_gro_solver(soybean_initial_state, soybean_para, weather.growingseason[[i]],
                                        soybean_steadystate_modules, soybean_derivative_modules,
                                        arg_names, soybean_solver_params)
         results         <- soybean_solver(CO2)
         canopy_assim = results[,"canopy_assimilation_rate"]
+        canopy_trans = results[,"canopy_transpiration_rate"]
+        canopy_gs    = results[,"canopy_conductance"]
         cname = colnames(results)
         sunlit_index = grep("^sunlit_Assim.*", cname) #matching all sunlit assim 
         shaded_index = grep("^shaded_Assim.*", cname) 
@@ -105,16 +123,23 @@ for (i in 1:length(years)) {
 #use a simple loop for now. Using matrix operation can speed this up
         canopy_assim_dmax = c()
         canopy_assim_dmean = c()
+        canopy_gs_dmean = c()
+        canopy_trans_dmean = c()
         assim_sunlit_dmax = c()
         assim_shaded_dmax = c()
         if(length(solar)!=length(canopy_assim)) stop("bug2")
         for (ss in 1:length(doy_unique)){
             d_ss = doy_unique[ss]
             doy_ind = which(DOY==d_ss)
+            if(length(doy_ind)<2) next  # sometimes we get an output of only 1-hour!?
             canopy_assim_dmax =  c(canopy_assim_dmax,max(canopy_assim[doy_ind],na.rm=TRUE))
             solar_dayi = solar[doy_ind]
             canopy_assim_dayi = canopy_assim[doy_ind]
+            canopy_gs_dayi    = canopy_gs[doy_ind] 
+            canopy_trans_dayi = canopy_trans[doy_ind] 
             canopy_assim_dmean = c(canopy_assim_dmean,mean(canopy_assim_dayi[solar_dayi>solar_threshold],na.rm=TRUE)) #daytime mean
+            canopy_gs_dmean    = c(canopy_gs_dmean,mean(canopy_gs_dayi[solar_dayi>solar_threshold],na.rm=TRUE)) #daytime mean
+            canopy_trans_dmean = c(canopy_trans_dmean,mean(canopy_trans_dayi[solar_dayi>solar_threshold],na.rm=TRUE)) #daytime mean
 
             tmp = apply(assim_sunlit[doy_ind,],2,max,na.rm=TRUE) #get the daily max of each layer
             if(length(tmp) != no_layers) stop("bug1")
@@ -124,7 +149,13 @@ for (i in 1:length(years)) {
         }
         total_assim_dmax[k,j,i,1] = mean(canopy_assim_dmax,na.rm=TRUE)
         total_assim_dmax[k,j,i,2] = mean(canopy_assim_dmean,na.rm=TRUE)
-        total_assim_dmax[k,j,i,3] = sum(canopy_assim,na.rm=TRUE)
+        total_assim_dmax[k,j,i,3] = sum(canopy_assim,na.rm=TRUE) #sum includes night-time!!!!
+
+#calculate WUE (mean of daily DAYTIME-MEAN)
+        top = canopy_assim_dmean * convert_rate_Assim
+        #bot = canopy_gs_dmean * convert_gs   #using gs 
+        bot = canopy_trans_dmean * convert_rate_Trans #using transpiration
+        wue[k,j,i] = mean(top/bot,na.rm=TRUE) 
 
         layer_assim_sunlit[k,j,i,] = rowMeans(assim_sunlit_dmax,na.rm=TRUE)
         layer_assim_shaded[k,j,i,] = rowMeans(assim_shaded_dmax,na.rm=TRUE)
@@ -156,6 +187,19 @@ for (i in 1:length(years)) {
              total_assim[k,j,i,dd] = max(canopy_assim[doy_ind])
         }
 
+#save the minimal index of As
+	sunlit_min_index = grep("^sunlit_min_index.*", cname) #matching all sunlit assim 
+	shaded_min_index = grep("^shaded_min_index.*", cname)
+	y_sunlit = results[,sunlit_min_index]
+	y_shaded = results[,shaded_min_index]
+	table_sunlit = c()
+	table_shaded = c()
+	for (ii in 1:10){
+	  table_sunlit = rbind(table_sunlit,table(factor(y_sunlit[,ii],levels = 1:3)))
+	  table_shaded = rbind(table_shaded,table(factor(y_shaded[,ii],levels = 1:3)))
+	}
+	minA_freq_sunlit[k,j,i,,] = as.matrix(table_sunlit) 
+	minA_freq_shaded[k,j,i,,] = as.matrix(table_shaded) 
   #      print(which(cname=="sunlit_Assim_layer_0"))
   #      print(which(cname=="shaded_Assim_layer_0"))
   #      saveRDS(results,"results_example.rds")
@@ -167,8 +211,10 @@ for (i in 1:length(years)) {
 t1 = Sys.time()
 print(t1-t0)
 #save the output for fast plotting
-X1 = list(layer_assim_sunlit,layer_assim_shaded,total_assim,podmass,shootmass,Ci_sunlit,Ci_shaded,total_assim_dmax)
-saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_001.rds",sep=""))
+X1 = list(layer_assim_sunlit,layer_assim_shaded,total_assim,podmass,shootmass,
+          Ci_sunlit,Ci_shaded,total_assim_dmax,minA_freq_sunlit,minA_freq_shaded,wue)
+saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_Jmax_and_Vmax.rds",sep=""))
+#saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_Jmax_and_TPU.rds",sep=""))
 #saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_2C.rds",sep=""))
 }
 

@@ -15,8 +15,8 @@ calc_difference<-function(x1,x0,thres){
 }
 
 source("../plot_functions.R")
-CO2s <- c(380,550,800,1000)
-years <- c('2002','2004','2005','2006')
+CO2s <- c(400,600,800,1000)
+years <- 2006:2015#c('2002','2004','2005','2006')
 doys = c(180,220,260)
 no_layers = 10
 v_scaler = seq(0.5,1.5,by=0.1) 
@@ -31,18 +31,19 @@ barplot_output=c()
 for (CO2 in CO2s){
    barplot_output = rbind(barplot_output,data.frame(year = years,CO2 = CO2))
 } 
-num_vars = 5 #pod, shoot, A_dmax, A_dmean, A_sum
+num_vars = 6 #pod, shoot, A_dmax, A_dmean,A_sum, WUE 
 array_init = array(NaN,c(dim(barplot_output)[1],num_vars))
-colnames(array_init)=c("pod", "shoot", "A_dmax", "A_dmean", "A_sum")
+colnames(array_init)=c("Pod","Shoot","An_max","An_dmean","An_sum","WUE")
 barplot_output = cbind(barplot_output,array_init)
 
 for (ii in 1:length(CO2s)){
 CO2_case = CO2s[ii] 
-X1 = readRDS(paste("../results_rds/results_CO2_",CO2_case,"_2C.rds",sep=""))
+X1 = readRDS(paste("../results_rds/results_CO2_",CO2_case,"_Jmax_and_Vmax.rds",sep=""))
 total_assim_all  = X1[[3]] #these are at specfic days
 podmass_all      = X1[[4]] #these are at specfic days
 shootmass_all    = X1[[5]] #these are at specfic days
 total_assim_dmax = X1[[8]]  #array(NaN,c(length(v_scaler),length(j_scaler),length(years),3))
+wue = X1[[11]]
 assim_diurnal    = array(NaN,c(length(v_scaler),length(j_scaler),length(years),length(months_gs),24,2))#X1[[9]]  #array(NaN,c(length(v_scaler),length(j_scaler),length(years),length(months_gs),24,2))
 
 layer_assim_sunlit = X1[[1]]  #array(NaN,c(length(v_scaler),length(j_scaler),length(years),10))
@@ -59,6 +60,7 @@ podmass = podmass_all[,,,doy_ind]
 podmass_diff = podmass
 shootmass = shootmass_all[,,,doy_ind]
 shootmass_diff = shootmass
+wue_diff = wue
 total_assim = total_assim_all[,,,doy_ind]  
 total_assim_diff = total_assim
 total_assim_dmax_diff = total_assim_dmax
@@ -74,6 +76,9 @@ for (k in 1:length(v_scaler)){
 
    x0 = total_assim_dmax[v0_ind,j0_ind,,]
    total_assim_dmax_diff[k,j,,] = (total_assim_dmax[k,j,,] - x0)/x0*100  
+  
+   x0 = wue[v0_ind,j0_ind,]
+   wue_diff[k,j,] = (wue[k,j,] - x0)/x0*100 
 
    x0 = assim_diurnal[v0_ind,j0_ind,,,,]
    thres = 1e-10
@@ -90,7 +95,8 @@ for (k in 1:length(v_scaler)){
 #print(c(min(total_assim_diff),max(total_assim_diff)))
 #stop()
 #list_diff = list(podmass_diff,shootmass_diff,total_assim_diff,total_assim_dmax_diff)
-list_diff = list(podmass_diff,shootmass_diff,total_assim_diff,total_assim_dmax_diff[,,,1],total_assim_dmax_diff[,,,2],total_assim_dmax_diff[,,,3])
+list_diff = list(podmass_diff,shootmass_diff,total_assim_diff,total_assim_dmax_diff[,,,1],total_assim_dmax_diff[,,,2],total_assim_dmax_diff[,,,3],wue_diff)
+varnames_all = c("POD","SHOOT","A_DMAX","A_DMEAN","A_SUM","WUE")
 
 layer_assim_sunlit_diff = layer_assim_sunlit
 layer_assim_shaded_diff = layer_assim_shaded
@@ -128,54 +134,59 @@ print(c(min(total_assim_dmax_diff),max(total_assim_dmax_diff)))
 #stop()
 if(FALSE){
   cbar_limit = c(-30,10)
-  #var2plot = c("POD","SHOOT","ASSIM","A_DMAX")
-  var2plot = c("POD","SHOOT","A_DMAX","A_DMEAN","A_SUM")
+  var2plot = c("POD","SHOOT","A_DMAX","A_SUM")
   plot_list = list()
   for (j in 1:length(var2plot)){
           varname = var2plot[j]
-          var_diff = list_diff[[j]]
+          var_diff = list_diff[[which(varnames_all==varname)]]
   #        if(j==3) cbar_limit = c(-40,40)
   #        if(j==4) cbar_limit = c(-20,20)
   	for (i in 1:length(years)){
   	    year_i = years[i]
   	    fig_i = plot_contour(v_scaler,j_scaler,var_diff[,,i],varname,cbar_limit)
-  #Adding the max gradient line
-              xy_trace = gradient_desc(v_scaler,j_scaler,var_diff[,,i],1) #1: descent; 2: ascent
-              new_df = as.data.frame(xy_trace)
-              fig_i <- fig_i+ geom_point(data = new_df,aes(x=V1,y=V2),inherit.aes = FALSE)
+  #+Adding the max gradient line
+              #xy_trace = gradient_desc(v_scaler,j_scaler,var_diff[,,i],1) #1: descent; 2: ascent
+              #new_df = as.data.frame(xy_trace)
+              #fig_i <- fig_i+ geom_point(data = new_df,aes(x=V1,y=V2),inherit.aes = FALSE)
+  #-Adding the max gradient line
               fig_order = i+ (j-1) * length(years)
   	    plot_list[[fig_order]] = fig_i 
   	}
   }
+pdf(paste("Fig_CO2_",CO2_case,"_doy",doy_to_plot,".pdf",sep=""),height = 24, width=24)
+grid.arrange(grobs = plot_list,nrow=length(var2plot),ncol=length(years))
+dev.off()
 }
 
-#pdf(paste("Fig_CO2_",CO2_case,"_doy",doy_to_plot,"_asc.pdf",sep=""),height = 24, width=24)
-#grid.arrange(grobs = plot_list,nrow=length(var2plot),ncol=length(years))
-#dev.off()
 
 v_use = 1.2
 j_use = 1.2
 v_index = which(abs(v_scaler-v_use)<1e-10)
 j_index = which(abs(j_scaler-j_use)<1e-10)
-tmp0 = cbind(podmass_diff[v_index,j_index,],shootmass_diff[v_index,j_index,],total_assim_dmax_diff[v_index,j_index,,])
+tmp0 = cbind(podmass_diff[v_index,j_index,],shootmass_diff[v_index,j_index,],total_assim_dmax_diff[v_index,j_index,,],wue_diff[v_index,j_index,])
 barplot_output[barplot_output$CO2 == CO2_case,-c(1,2)] = tmp0 
 #write.csv(csv_output,paste("diff_",CO2_case,".csv",sep=""))
 
 #if(ii==1) z_gd = total_assim_dmax_diff[,,1,2] 
 
 #diurnal plot
-pdfname = paste0("assim_diurnal_",CO2_case,".pdf")
-v_use = 1.2
-j_use = 1.2
+#pdfname = paste0("assim_diurnal_",CO2_case,".pdf")
+#v_use = 1.2
+#j_use = 1.2
 #plot_diurnal(assim_diurnal_diff,years,months_gs,pdfname,v_use,j_use,v_scaler,j_scaler)
 
 
 }#end for CO2s
 
 #bar plot
-saveRDS(barplot_output,"barplot_output_2C.rds")
-#pdfname = "barplot1.pdf"
-#barplot(barplot_output,pdfname)
+#barplot_output = barplot_output[barplot_output$year==2002,-6] #only plot 2002 and remove dmean
+#saveRDS(barplot_output,"barplot_output.rds")
+barplot_output = barplot_output[,c(1,2,3,4,7,5,6,8)] #put An(sum) first
+
+print(colnames(barplot_output))
+print(dim(barplot_output))
+pdfname = "barplot2.pdf"
+barplot(barplot_output,pdfname)
 
 
 #gradient descent
