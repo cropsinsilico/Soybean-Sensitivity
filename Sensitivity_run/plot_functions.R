@@ -1,8 +1,9 @@
-plot_contour<-function(x,y,data,var_name,cbar_limit){
+plot_contour<-function(x,y,data,var_name,cbar_limit,ii){
     s = expand.grid(x,y) 
     data[data<=cbar_limit[1]] = cbar_limit[1]  #make sure min values are also plotted!
     data[data>=cbar_limit[2]] = cbar_limit[2]
     df = data.frame(s,as.vector(data))
+    fs = 18
     colnames(df) = c("vmax","jmax","z")
     v<-ggplot(df,aes(x=vmax,y=jmax,z=z,fill=z))+geom_contour_filled()+ 
        geom_tile()+
@@ -10,12 +11,22 @@ plot_contour<-function(x,y,data,var_name,cbar_limit){
        #geom_text_contour(stroke = 0.2,min.size = 2)+
        xlab("vmax")+
        scale_fill_distiller(name=var_name,palette = "Spectral",limits = cbar_limit)+
-       theme(axis.text=element_text(size=14),
-             axis.title=element_text(size=14,face="bold"),
-             legend.text=element_text(size=14),
-             legend.title=element_text(size=14))
+       theme(axis.text   =element_text(size=fs),
+             axis.title  =element_text(size=fs,face="bold"),
+             legend.text =element_text(size=fs),
+             legend.title=element_text(size=fs))
+#remove axis labels 
+     v <- v + theme(axis.text =element_blank(),
+                    axis.ticks=element_blank(),
+                    axis.title=element_blank()) 
+#only plot legend at one column
+#     if(ii!=4){
+     v <- v + guides(fill=FALSE, color=FALSE)
+#     }
+#add a triangle in the center
+     v <- v + geom_point(aes(x=1,y=1),shape=24, fill="grey",color="black", size=7)
 #       scale_fill_distiller(name=var_name,palette = "RdBu",limits = cbar_limit)
-
+     return(v)
 }
 
 layers_contour<-function(x,y,var2plot,cbar_limit,pdf_name,no_layers,years){
@@ -108,6 +119,23 @@ gradient_desc<-function(x,y,z,optionx){
             xy_trace = rbind(xy_trace,c(x1,y1))
 	}	
      return(xy_trace)
+}
+
+corr_plot <- function(df,pdfname,varnames,weather_varname){
+   text_size = 18
+   plist = list()
+   for (i in 1:length(varnames)){
+   yname = varnames[i] 
+   p <- ggplot(data=df, aes_string(x=weather_varname, y=yname)) +
+        geom_point()+
+        geom_smooth(method="lm")+
+        theme(axis.text=element_text(size=text_size),
+              axis.title=element_text(size=text_size,face="bold"))
+   plist[[i]] = p
+   }
+   pdf(pdfname,height = 8, width=12)
+   grid.arrange(grobs = plist,nrow=2,ncol=3)
+   dev.off()
 }
 
 plot_diurnal<-function(y,years,months_gs,pdfname,v_use,j_use,v_scaler,j_scaler){

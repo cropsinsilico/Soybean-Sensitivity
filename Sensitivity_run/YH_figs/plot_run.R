@@ -36,6 +36,7 @@ array_init = array(NaN,c(dim(barplot_output)[1],num_vars))
 colnames(array_init)=c("Pod","Shoot","An_max","An_dmean","An_sum","WUE")
 barplot_output = cbind(barplot_output,array_init)
 
+plot_list_heatmap = list()
 for (ii in 1:length(CO2s)){
 CO2_case = CO2s[ii] 
 X1 = readRDS(paste("../results_rds/results_CO2_",CO2_case,"_Jmax_and_Vmax.rds",sep=""))
@@ -134,28 +135,25 @@ print(c(min(total_assim_dmax_diff),max(total_assim_dmax_diff)))
 #stop()
 if(FALSE){
   cbar_limit = c(-30,10)
-  var2plot = c("POD","SHOOT","A_DMAX","A_SUM")
-  plot_list = list()
+  var2plot = c("POD","SHOOT","A_SUM","A_DMAX","WUE")
   for (j in 1:length(var2plot)){
           varname = var2plot[j]
           var_diff = list_diff[[which(varnames_all==varname)]]
   #        if(j==3) cbar_limit = c(-40,40)
   #        if(j==4) cbar_limit = c(-20,20)
-  	for (i in 1:length(years)){
-  	    year_i = years[i]
-  	    fig_i = plot_contour(v_scaler,j_scaler,var_diff[,,i],varname,cbar_limit)
+ # 	for (i in 1:length(years)){
+ # 	    year_i = years[i]
+         var_diff_avg = apply(var_diff,c(1,2),mean) #10-year mean
+  	  fig_i = plot_contour(v_scaler,j_scaler,var_diff_avg,varname,cbar_limit,ii)
   #+Adding the max gradient line
               #xy_trace = gradient_desc(v_scaler,j_scaler,var_diff[,,i],1) #1: descent; 2: ascent
               #new_df = as.data.frame(xy_trace)
               #fig_i <- fig_i+ geom_point(data = new_df,aes(x=V1,y=V2),inherit.aes = FALSE)
   #-Adding the max gradient line
-              fig_order = i+ (j-1) * length(years)
-  	    plot_list[[fig_order]] = fig_i 
-  	}
+          fig_order = ii + (j-1) * length(CO2s) #arrange plot order by rows
+  	  plot_list_heatmap[[fig_order]] = fig_i 
+ # 	}
   }
-pdf(paste("Fig_CO2_",CO2_case,"_doy",doy_to_plot,".pdf",sep=""),height = 24, width=24)
-grid.arrange(grobs = plot_list,nrow=length(var2plot),ncol=length(years))
-dev.off()
 }
 
 
@@ -175,18 +173,47 @@ barplot_output[barplot_output$CO2 == CO2_case,-c(1,2)] = tmp0
 #j_use = 1.2
 #plot_diurnal(assim_diurnal_diff,years,months_gs,pdfname,v_use,j_use,v_scaler,j_scaler)
 
-
 }#end for CO2s
 
+##heatmap plot
+#pdf(paste("Fig_heatmap.pdf",sep=""),height = 30, width=24)
+#grid.arrange(grobs = plot_list_heatmap,nrow=length(var2plot),ncol=length(CO2s))
+#dev.off()
+
+#stop()
 #bar plot
 #barplot_output = barplot_output[barplot_output$year==2002,-6] #only plot 2002 and remove dmean
 #saveRDS(barplot_output,"barplot_output.rds")
 barplot_output = barplot_output[,c(1,2,3,4,7,5,6,8)] #put An(sum) first
 
 print(colnames(barplot_output))
-print(dim(barplot_output))
 pdfname = "barplot2.pdf"
-barplot(barplot_output,pdfname)
+#barplot(barplot_output,pdfname)
+
+#correlation plot
+sow_day     =   150 
+harvest_day =   280
+temp = c()
+pr   = c()
+for (i in 1:length(years)) {
+  yr <- years[i]
+  weather <- read.csv(file = paste0('../WeatherData/',yr,'/', yr, '_Bondville_IL_daylength.csv'))
+  sd.ind <- which(weather$doy == sow_day)[1]      # start of sowing day
+  hd.ind <- which(weather$doy == harvest_day)[24] # end of harvest day
+  weather.growingseason <- weather[sd.ind:hd.ind,]
+  temp = c(temp,mean(weather.growingseason$temp))
+  pr   = c(pr,sum(weather.growingseason$precip))
+#  print(c(mean(weather.growingseason$temp),sum(weather.growingseason$precip),mean(weather.growingseason$solar),mean(weather.growingseason$rh)))
+}
+varnames = c("Pod","Shoot","An_max","An_dmean","An_sum","WUE")
+df = barplot_output#[,c("year","CO2",varname)]
+CO2_level = 400 
+weather_var = "temp"
+df = df[df$CO2==CO2_level,]
+df = cbind(df,temp=temp,pr=pr)
+pdfname = paste0("corr_plot_",weather_var,CO2_level,".pdf")
+corr_plot(df,pdfname,varnames,weather_var)
+saveRDS(df,"barplot_output_with_weather.rds")
 
 
 #gradient descent
