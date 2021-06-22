@@ -4,6 +4,7 @@ library(reshape2)
 library(ggplot2) # To ggplot functions
 library(metR)
 library(akima)
+library(abind)
 
 calc_difference<-function(x1,x0,thres){
 
@@ -17,34 +18,38 @@ calc_difference<-function(x1,x0,thres){
 source("../plot_functions.R")
 CO2s <- c(400,600,800,1000)
 years <- 2006:2015#c('2002','2004','2005','2006')
+stage = 2
 doys = c(180,220,260)
 no_layers = 10
-v_scaler = seq(0.5,1.5,by=0.1) 
-j_scaler = seq(0.5,1.5,by=0.1) 
+step = 0.1
+v_scaler = seq(0.5,1.5,by=step) 
+j_scaler = seq(0.5,1.5,by=step) 
 doy_to_plot = 260
 doy_ind = which(doys==doy_to_plot)
 v0_ind = which(v_scaler==1)
 j0_ind = which(j_scaler==1)
+print(c(v0_ind,j0_ind))
 months_gs = 6:10
 
 barplot_output=c()
 for (CO2 in CO2s){
    barplot_output = rbind(barplot_output,data.frame(year = years,CO2 = CO2))
 } 
-num_vars = 6 #pod, shoot, A_dmax, A_dmean,A_sum, WUE 
+num_vars = 7 #pod, shoot, A_dmax, A_dmean,A_sum, WUE,TRANS 
 array_init = array(NaN,c(dim(barplot_output)[1],num_vars))
-colnames(array_init)=c("Pod","Shoot","An_max","An_dmean","An_sum","WUE")
+colnames(array_init)=c("Pod","Shoot","An_max","An_dmean","An_sum","WUE","Trans")
 barplot_output = cbind(barplot_output,array_init)
 
 plot_list_heatmap = list()
 for (ii in 1:length(CO2s)){
 CO2_case = CO2s[ii] 
-X1 = readRDS(paste("../results_rds/results_CO2_",CO2_case,"_Jmax_and_Vmax.rds",sep=""))
+X1 = readRDS(paste("../results_rds/results_CO2_",CO2_case,"_Jmax_and_Vmax_stage",stage,".rds",sep=""))
 total_assim_all  = X1[[3]] #these are at specfic days
 podmass_all      = X1[[4]] #these are at specfic days
 shootmass_all    = X1[[5]] #these are at specfic days
 total_assim_dmax = X1[[8]]  #array(NaN,c(length(v_scaler),length(j_scaler),length(years),3))
-wue = X1[[11]]
+wue   = X1[[11]]
+trans = X1[[12]]
 assim_diurnal    = array(NaN,c(length(v_scaler),length(j_scaler),length(years),length(months_gs),24,2))#X1[[9]]  #array(NaN,c(length(v_scaler),length(j_scaler),length(years),length(months_gs),24,2))
 
 layer_assim_sunlit = X1[[1]]  #array(NaN,c(length(v_scaler),length(j_scaler),length(years),10))
@@ -57,12 +62,18 @@ Ci_shaded = X1[[7]]  #array(NaN,c(length(v_scaler),length(j_scaler),length(years
 #print(c(min(Ci_shaded[,,,10]),max(Ci_shaded[,,,10])))
 #print(c(min(layer_assim_shaded[,,2,2]),max(layer_assim_shaded[,,2,2])))
 #print(layer_assim_shaded[,,2,2])
-podmass = podmass_all[,,,doy_ind]
+podmass     = podmass_all[,,,doy_ind]
+shootmass   = shootmass_all[,,,doy_ind]
+total_assim = total_assim_all[,,,doy_ind]  
+if(length(dim(podmass))<3){
+    podmass = abind(podmass,podmass,along=3)
+    shootmass = abind(shootmass,shootmass,along=3)
+    total_assim = abind(total_assim,total_assim,along=3)
+}
 podmass_diff = podmass
-shootmass = shootmass_all[,,,doy_ind]
 shootmass_diff = shootmass
 wue_diff = wue
-total_assim = total_assim_all[,,,doy_ind]  
+trans_diff = trans 
 total_assim_diff = total_assim
 total_assim_dmax_diff = total_assim_dmax
 assim_diurnal_diff = assim_diurnal
@@ -81,6 +92,9 @@ for (k in 1:length(v_scaler)){
    x0 = wue[v0_ind,j0_ind,]
    wue_diff[k,j,] = (wue[k,j,] - x0)/x0*100 
 
+   x0 = trans[v0_ind,j0_ind,]
+   trans_diff[k,j,] = (trans[k,j,] - x0)/x0*100 
+
    x0 = assim_diurnal[v0_ind,j0_ind,,,,]
    thres = 1e-10
    assim_diurnal_diff[k,j,,,,] = calc_difference(assim_diurnal[k,j,,,,],x0,thres)
@@ -96,8 +110,8 @@ for (k in 1:length(v_scaler)){
 #print(c(min(total_assim_diff),max(total_assim_diff)))
 #stop()
 #list_diff = list(podmass_diff,shootmass_diff,total_assim_diff,total_assim_dmax_diff)
-list_diff = list(podmass_diff,shootmass_diff,total_assim_diff,total_assim_dmax_diff[,,,1],total_assim_dmax_diff[,,,2],total_assim_dmax_diff[,,,3],wue_diff)
-varnames_all = c("POD","SHOOT","A_DMAX","A_DMEAN","A_SUM","WUE")
+list_diff = list(podmass_diff,shootmass_diff,total_assim_diff,total_assim_dmax_diff[,,,1],total_assim_dmax_diff[,,,2],total_assim_dmax_diff[,,,3],wue_diff,trans_diff)
+varnames_all = c("POD","SHOOT","A_DMAX","A_DMEAN","A_SUM","WUE","TRANS")
 
 layer_assim_sunlit_diff = layer_assim_sunlit
 layer_assim_shaded_diff = layer_assim_shaded
@@ -133,26 +147,30 @@ print(c(min(total_assim_dmax_diff),max(total_assim_dmax_diff)))
 #print(which(layer_assim_shaded<(-100),arr.ind=TRUE))
 #print(which(layer_assim_sunlit<(-100),arr.ind=TRUE))
 #stop()
-if(FALSE){
+if(TRUE){
   cbar_limit = c(-30,10)
   var2plot = c("POD","SHOOT","A_SUM","A_DMAX","WUE")
   for (j in 1:length(var2plot)){
-          varname = var2plot[j]
-          var_diff = list_diff[[which(varnames_all==varname)]]
+         t0 = Sys.time()
+         varname = var2plot[j]
+         print(varname)
+         var_diff = list_diff[[which(varnames_all==varname)]]
   #        if(j==3) cbar_limit = c(-40,40)
   #        if(j==4) cbar_limit = c(-20,20)
  # 	for (i in 1:length(years)){
  # 	    year_i = years[i]
          var_diff_avg = apply(var_diff,c(1,2),mean) #10-year mean
-  	  fig_i = plot_contour(v_scaler,j_scaler,var_diff_avg,varname,cbar_limit,ii)
+  	 fig_i = plot_contour(v_scaler,j_scaler,var_diff_avg,varname,cbar_limit,ii)
   #+Adding the max gradient line
-              #xy_trace = gradient_desc(v_scaler,j_scaler,var_diff[,,i],1) #1: descent; 2: ascent
-              #new_df = as.data.frame(xy_trace)
-              #fig_i <- fig_i+ geom_point(data = new_df,aes(x=V1,y=V2),inherit.aes = FALSE)
+         xy_trace = gradient_desc(v_scaler,j_scaler,var_diff_avg,2) #1: descent; 2: ascent
+         new_df = as.data.frame(xy_trace)
+         fig_i <- fig_i+ geom_point(data = new_df,aes(x=V1,y=V2),inherit.aes = FALSE)
   #-Adding the max gradient line
-          fig_order = ii + (j-1) * length(CO2s) #arrange plot order by rows
-  	  plot_list_heatmap[[fig_order]] = fig_i 
+         fig_order = ii + (j-1) * length(CO2s) #arrange plot order by rows
+  	 plot_list_heatmap[[fig_order]] = fig_i 
  # 	}
+         t1 = Sys.time()
+         print(t1-t0)
   }
 }
 
@@ -161,7 +179,7 @@ v_use = 1.2
 j_use = 1.2
 v_index = which(abs(v_scaler-v_use)<1e-10)
 j_index = which(abs(j_scaler-j_use)<1e-10)
-tmp0 = cbind(podmass_diff[v_index,j_index,],shootmass_diff[v_index,j_index,],total_assim_dmax_diff[v_index,j_index,,],wue_diff[v_index,j_index,])
+tmp0 = cbind(podmass_diff[v_index,j_index,],shootmass_diff[v_index,j_index,],total_assim_dmax_diff[v_index,j_index,,],wue_diff[v_index,j_index,],trans_diff[v_index,j_index,])
 barplot_output[barplot_output$CO2 == CO2_case,-c(1,2)] = tmp0 
 #write.csv(csv_output,paste("diff_",CO2_case,".csv",sep=""))
 
@@ -175,45 +193,53 @@ barplot_output[barplot_output$CO2 == CO2_case,-c(1,2)] = tmp0
 
 }#end for CO2s
 
-##heatmap plot
+#heatmap plot
 #pdf(paste("Fig_heatmap.pdf",sep=""),height = 30, width=24)
 #grid.arrange(grobs = plot_list_heatmap,nrow=length(var2plot),ncol=length(CO2s))
 #dev.off()
 
-#stop()
 #bar plot
 #barplot_output = barplot_output[barplot_output$year==2002,-6] #only plot 2002 and remove dmean
 #saveRDS(barplot_output,"barplot_output.rds")
-barplot_output = barplot_output[,c(1,2,3,4,7,5,6,8)] #put An(sum) first
 
-print(colnames(barplot_output))
-pdfname = "barplot2.pdf"
-#barplot(barplot_output,pdfname)
+#1:years; 2: CO2s
+#3:pod; 4:shoot; 5:An_max; 6:An_dmean; 7:An_sum; 8:wue; 9: trans
+barplot_output_sub = barplot_output[,c(1,2,
+                                   3,4,9,
+                                   5,6,8)] #put An(sum) first; plot SIX only!
+
+print(colnames(barplot_output_sub))
+pdfname = paste0("barplot_stage",stage,".pdf")
+#barplot(barplot_output_sub,pdfname)
 
 #correlation plot
-sow_day     =   150 
-harvest_day =   280
-temp = c()
-pr   = c()
-for (i in 1:length(years)) {
-  yr <- years[i]
-  weather <- read.csv(file = paste0('../WeatherData/',yr,'/', yr, '_Bondville_IL_daylength.csv'))
-  sd.ind <- which(weather$doy == sow_day)[1]      # start of sowing day
-  hd.ind <- which(weather$doy == harvest_day)[24] # end of harvest day
-  weather.growingseason <- weather[sd.ind:hd.ind,]
-  temp = c(temp,mean(weather.growingseason$temp))
-  pr   = c(pr,sum(weather.growingseason$precip))
-#  print(c(mean(weather.growingseason$temp),sum(weather.growingseason$precip),mean(weather.growingseason$solar),mean(weather.growingseason$rh)))
-}
-varnames = c("Pod","Shoot","An_max","An_dmean","An_sum","WUE")
+#sow_day     =   150 
+#harvest_day =   280
+#temp = c()
+#pr   = c()
+#for (i in 1:length(years)) {
+#  yr <- years[i]
+#  weather <- read.csv(file = paste0('../WeatherData/',yr,'/', yr, '_Bondville_IL_daylength.csv'))
+#  sd.ind <- which(weather$doy == sow_day)[1]      # start of sowing day
+#  hd.ind <- which(weather$doy == harvest_day)[24] # end of harvest day
+#  weather.growingseason <- weather[sd.ind:hd.ind,]
+#  temp = c(temp,mean(weather.growingseason$temp))
+#  pr   = c(pr,sum(weather.growingseason$precip))
+##  print(c(mean(weather.growingseason$temp),sum(weather.growingseason$precip),mean(weather.growingseason$solar),mean(weather.growingseason$rh)))
+#}
+climates = X1[[13]] 
+#varnames = c("Pod","Shoot","An_max","An_dmean","An_sum","WUE")
+varnames = c("Pod","Shoot","Trans","An_dmean","An_sum","WUE")
 df = barplot_output#[,c("year","CO2",varname)]
 CO2_level = 400 
 weather_var = "temp"
 df = df[df$CO2==CO2_level,]
-df = cbind(df,temp=temp,pr=pr)
-pdfname = paste0("corr_plot_",weather_var,CO2_level,".pdf")
+df = cbind(df,climates)
+cname = colnames(df) 
+colnames(df) = c(cname[1:(length(cname)-3)],"temp","TTC","precip")
+pdfname = paste0("corr_plot_",weather_var,CO2_level,"s",stage,".pdf")
 corr_plot(df,pdfname,varnames,weather_var)
-saveRDS(df,"barplot_output_with_weather.rds")
+#saveRDS(df,"barplot_output_with_weather.rds")
 
 
 #gradient descent

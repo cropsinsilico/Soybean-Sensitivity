@@ -2,6 +2,7 @@ library(BioCroSoyBean)
 # Clear workspace
 rm(list=ls())
 
+source("calc_GDD.R")
 # Set working directory to location of this file
 #this.dir <- dirname(parent.frame(2)$ofile)
 #setwd(this.dir)
@@ -50,6 +51,7 @@ shootmass   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),length
 total_assim = array(NaN,c(length(v_scaler),length(j_scaler),length(years),length(doys)))    
 
 wue                = array(NaN,c(length(v_scaler),length(j_scaler),length(years))) #umol CO2/ mmol H2O 
+trans              = array(NaN,c(length(v_scaler),length(j_scaler),length(years))) #mmol H2O 
 total_assim_dmax   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),3)) #mean of daily daytime max,mean & accumulate 
 layer_assim_sunlit = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers)) 
 layer_assim_shaded = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers)) 
@@ -57,6 +59,8 @@ Ci_sunlit          = array(NaN,c(length(v_scaler),length(j_scaler),length(years)
 Ci_shaded          = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers)) 
 minA_freq_sunlit   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers,3)) #3 to save FREQs of Ac, Aj & Ap
 minA_freq_shaded   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers,3)) 
+
+climate_metrics    = array(NaN,c(length(years),3)) #mean temp, TTC, total Precip
 
 for (CO2 in CO2s){
 t0 = Sys.time()
@@ -116,8 +120,12 @@ for (i in 1:length(years)) {
         tmp = tmp[daytime_ind,] 
         Ci_shaded[k,j,i,] = apply(tmp,c(2),mean,na.rm=TRUE) #apply mean for each layer
 
+        DVI = results[,"DVI"]
         DOY = results[,"doy"]
-        doy_unique = unique(DOY)
+#subset the DOYs by DVI stages
+        DVI_sub_condition = which(DVI < 1)
+        DOY_sub = DOY[DVI_sub_condition] 
+        doy_unique = unique(DOY_sub)
         doy_unique = doy_unique[!is.na(doy_unique)]
 #for assimilation, we calculate the MEAN of DAILY MAX! 
 #use a simple loop for now. Using matrix operation can speed this up
@@ -155,7 +163,8 @@ for (i in 1:length(years)) {
         top = canopy_assim_dmean * convert_rate_Assim
         #bot = canopy_gs_dmean * convert_gs   #using gs 
         bot = canopy_trans_dmean * convert_rate_Trans #using transpiration
-        wue[k,j,i] = mean(top/bot,na.rm=TRUE) 
+        wue[k,j,i]   = mean(top/bot,na.rm=TRUE) 
+        trans[k,j,i] = mean(bot,na.rm=TRUE) 
 
         layer_assim_sunlit[k,j,i,] = rowMeans(assim_sunlit_dmax,na.rm=TRUE)
         layer_assim_shaded[k,j,i,] = rowMeans(assim_shaded_dmax,na.rm=TRUE)
@@ -178,14 +187,18 @@ for (i in 1:length(years)) {
               stop()
         }
 #for biomass and canoy_assim we save the values on those specfic doys
-        for (dd in 1:length(doys)){
-             doy_ind = which(DOY==doys[dd])
+#        for (dd in 1:length(doys)){
+#             doy_ind = which(DOY==doys[dd])
+             dd = 3  #put it in the last to be consistent with the plotting
+             doy_ind = which(DOY==tail(doy_unique,1)) #the last day
              grain = results[,"Grain"]
-             podmass[k,j,i,dd] = max(grain[doy_ind])
+             podmass[k,j,i,dd] = max(grain[doy_ind],na.rm=TRUE)
              aboveground_mass = results[,"Grain"]+results[,"Leaf"]+results[,"Stem"]
-             shootmass[k,j,i,dd] = max(aboveground_mass[doy_ind]) 
-             total_assim[k,j,i,dd] = max(canopy_assim[doy_ind])
-        }
+             shootmass[k,j,i,dd] = max(aboveground_mass[doy_ind],na.rm=TRUE) 
+             total_assim[k,j,i,dd] = max(canopy_assim[doy_ind],na.rm=TRUE)
+#        }
+if(yr==2006 & k==6 &j==6) saveRDS(results,"results_2006_CTL.rds")
+if(yr==2006 & k==8 &j==8) saveRDS(results,"results_2006_SEN.rds")
 
 #save the minimal index of As
 	sunlit_min_index = grep("^sunlit_min_index.*", cname) #matching all sunlit assim 
@@ -206,15 +219,20 @@ for (i in 1:length(years)) {
         rm(soybean_solver)  #make sure the solver is properly cleaned
   } 
   } 
-}
+  temp   = weather.growingseason[[i]]$temp
+  precip = weather.growingseason[[i]]$precip
+  climate_metrics[i,1] = mean(temp[DVI_sub_condition],na.rm=TRUE) 
+  climate_metrics[i,2] = gdd_calc(DVI[DVI_sub_condition],temp[DVI_sub_condition])  
+  climate_metrics[i,3] = sum(precip[DVI_sub_condition],na.rm=TRUE) 
+} #end years
 
 t1 = Sys.time()
 print(t1-t0)
 #save the output for fast plotting
 X1 = list(layer_assim_sunlit,layer_assim_shaded,total_assim,podmass,shootmass,
-          Ci_sunlit,Ci_shaded,total_assim_dmax,minA_freq_sunlit,minA_freq_shaded,wue)
-saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_Jmax_and_Vmax.rds",sep=""))
+          Ci_sunlit,Ci_shaded,total_assim_dmax,minA_freq_sunlit,minA_freq_shaded,wue,trans,climate_metrics)
+saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_Jmax_and_Vmax_stage1.rds",sep=""))
 #saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_Jmax_and_TPU.rds",sep=""))
 #saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_2C.rds",sep=""))
-}
+} #end CO2s
 

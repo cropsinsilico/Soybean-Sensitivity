@@ -126,8 +126,9 @@ corr_plot <- function(df,pdfname,varnames,weather_varname){
    plist = list()
    for (i in 1:length(varnames)){
    yname = varnames[i] 
-   p <- ggplot(data=df, aes_string(x=weather_varname, y=yname)) +
+   p <- ggplot(data=df, aes_string(x=weather_varname, y=yname,label="year")) +
         geom_point()+
+        geom_text(vjust = 0, nudge_y = 0.5)+
         geom_smooth(method="lm")+
         theme(axis.text=element_text(size=text_size),
               axis.title=element_text(size=text_size,face="bold"))
