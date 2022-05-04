@@ -29,12 +29,14 @@ weather.growingseason <- list()
 
 # for partial_gro_solver
 arg_names <- c('Catm') # atmospheric CO2 parameter
-CO2s <- c(400,600,800,1000)
+CO2s <- 400#c(400,600,800,1000)
 solar_threshold = 10 #to get the daytime
 no_layers = 10
+stage = 0 
+lai_threshold = 0.5
 doys = c(180,220,260) #specfic doy to investigate
 #varying vmax & jmax from -50% to +50%
-varying_step = 0.1
+varying_step = 0.05
 v_scaler   = seq(0.5,1.5,by=varying_step) 
 j_scaler   = seq(0.5,1.5,by=varying_step) 
 tpu_scaler = seq(0.5,1.5,by=varying_step) 
@@ -60,7 +62,7 @@ Ci_shaded          = array(NaN,c(length(v_scaler),length(j_scaler),length(years)
 minA_freq_sunlit   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers,3)) #3 to save FREQs of Ac, Aj & Ap
 minA_freq_shaded   = array(NaN,c(length(v_scaler),length(j_scaler),length(years),no_layers,3)) 
 
-climate_metrics    = array(NaN,c(length(years),3)) #mean temp, TTC, total Precip
+climate_metrics    = array(NaN,c(length(years),6)) #mean temp, TTC, total Precip
 
 for (CO2 in CO2s){
 t0 = Sys.time()
@@ -96,6 +98,7 @@ for (i in 1:length(years)) {
         canopy_assim = results[,"canopy_assimilation_rate"]
         canopy_trans = results[,"canopy_transpiration_rate"]
         canopy_gs    = results[,"canopy_conductance"]
+        lai_hourly   = results[,"lai"]
         cname = colnames(results)
         sunlit_index = grep("^sunlit_Assim.*", cname) #matching all sunlit assim 
         shaded_index = grep("^shaded_Assim.*", cname) 
@@ -123,7 +126,13 @@ for (i in 1:length(years)) {
         DVI = results[,"DVI"]
         DOY = results[,"doy"]
 #subset the DOYs by DVI stages
-        DVI_sub_condition = which(DVI < 1)
+        if(stage == 1){
+          DVI_sub_condition = which(DVI < 1)
+        }else if(stage == 2){
+          DVI_sub_condition = which(DVI >= 1)
+        }else if(stage == 0){ #all of them!
+          DVI_sub_condition = which(DVI < 100)
+        }else{stop("wrong stage value!")}
         DOY_sub = DOY[DVI_sub_condition] 
         doy_unique = unique(DOY_sub)
         doy_unique = doy_unique[!is.na(doy_unique)]
@@ -155,6 +164,18 @@ for (i in 1:length(years)) {
             tmp = apply(assim_shaded[doy_ind,],2,max,na.rm=TRUE) #get the daily max of each layer
             assim_shaded_dmax = cbind(assim_shaded_dmax,tmp)
         }
+#remove days when LAI are too small
+	doy_min = DOY[which(lai_hourly>lai_threshold)][1]
+	doy_max = tail(DOY[which(lai_hourly>lai_threshold)],1)
+	canopy_assim_dmax = canopy_assim_dmax[doy_unique>doy_min & doy_unique<doy_max]
+	canopy_assim_dmean= canopy_assim_dmean[doy_unique>doy_min & doy_unique<doy_max]
+	canopy_trans_dmean= canopy_trans_dmean[doy_unique>doy_min & doy_unique<doy_max]
+	canopy_assim      = canopy_assim[DOY > doy_min & DOY<doy_max] #this is hourly data!
+	if( (abs(j_scaler[j]-1) < 1e-4) & (abs(v_scaler[k]-1) < 1e-4) ){ #save only the CTL's lai_sub for subsetting climates
+		print(c(soybean_para$jmax,soybean_para$vmax1))
+		lai_sub = which(lai_hourly>lai_threshold)
+	}
+#daily averaging
         total_assim_dmax[k,j,i,1] = mean(canopy_assim_dmax,na.rm=TRUE)
         total_assim_dmax[k,j,i,2] = mean(canopy_assim_dmean,na.rm=TRUE)
         total_assim_dmax[k,j,i,3] = sum(canopy_assim,na.rm=TRUE) #sum includes night-time!!!!
@@ -221,9 +242,16 @@ if(yr==2006 & k==8 &j==8) saveRDS(results,"results_2006_SEN.rds")
   } 
   temp   = weather.growingseason[[i]]$temp
   precip = weather.growingseason[[i]]$precip
-  climate_metrics[i,1] = mean(temp[DVI_sub_condition],na.rm=TRUE) 
-  climate_metrics[i,2] = gdd_calc(DVI[DVI_sub_condition],temp[DVI_sub_condition])  
-  climate_metrics[i,3] = sum(precip[DVI_sub_condition],na.rm=TRUE) 
+  rh     = weather.growingseason[[i]]$rh
+  ws     = weather.growingseason[[i]]$ws
+  subset_condition = intersect(lai_sub,DVI_sub_condition) 
+  print(c("subset length is",length(subset_condition)))
+  climate_metrics[i,1] = mean(temp[subset_condition],na.rm=TRUE) 
+  climate_metrics[i,2] = mean(solar[subset_condition],na.rm=TRUE) 
+  climate_metrics[i,3] = mean(rh[subset_condition],na.rm=TRUE) 
+  climate_metrics[i,4] = sum(precip[subset_condition],na.rm=TRUE) 
+  climate_metrics[i,5] = mean(ws[subset_condition],na.rm=TRUE) 
+  climate_metrics[i,6] = gdd_calc(DVI[subset_condition],temp[subset_condition])  
 } #end years
 
 t1 = Sys.time()
@@ -231,8 +259,7 @@ print(t1-t0)
 #save the output for fast plotting
 X1 = list(layer_assim_sunlit,layer_assim_shaded,total_assim,podmass,shootmass,
           Ci_sunlit,Ci_shaded,total_assim_dmax,minA_freq_sunlit,minA_freq_shaded,wue,trans,climate_metrics)
-saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_Jmax_and_Vmax_stage1.rds",sep=""))
+saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_stage",stage,"_05.rds",sep=""))
 #saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_Jmax_and_TPU.rds",sep=""))
 #saveRDS(X1,file=paste("results_rds/results_CO2_",CO2,"_2C.rds",sep=""))
 } #end CO2s
-
