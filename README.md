@@ -1,18 +1,20 @@
 # Soybean-BioCro
 
-The code in this repository reproduces the results in Matthews et al. Soybean-BioCro: A semi-mechanistic model of soybean growth. Submitted to in silico Plants.
+The code in this repository reproduces the results in [He & Matthews (2023)](https://doi.org/10.1016/j.fcr.2023.108907). Feel free to contact us or create a new issue on Github if you have any questions.
 
-The version of BioCro associated with this manuscript is included as a submodule in this repository. To clone this repository with the submodule using the following github command:
+There are two main parts of the code: 1) Running Soybean-BioCro to generate model outputs; and 2) Plotting using the model outputs. There are some figures that were generated using Matlab regarding the leaf-level FvCB model, which is much easier to run since it needs only a few Matlab files.
 
-`git clone --recurse-submodules https://github.com/cropsinsilico/Soybean-BioCro.git`
+The version of BioCro associated with this manuscript is included as a submodule in this repository. To clone this repository with the submodule using the following command:
 
-See the [BioCro README](https://github.com/ebimodeling/biocro/tree/5cbccbf9f0832e2a2be0a91a41a3f7048782b3cb#readme) to install BioCro.
+`git clone --recurse-submodules https://github.com/cropsinsilico/Soybean-Sensitivity.git`
 
-To run an example run of Soybean-BioCro use the following command after installing the BioCro package:
+## Running sensitivity experiments with Soybean-BioCro
+- Install Soybean-BioCro. See the [BioCro README](https://github.com/ebimodeling/biocro/tree/5cbccbf9f0832e2a2be0a91a41a3f7048782b3cb#readme) to install BioCro.
+- Run a 10-year sensitivity: To be added
+- Run a 1000-year (bootstrap) sensitivity: To be added
 
-`result <- Gro_solver(soybean_initial_state, soybean_parameters, soybean_weather2002, soybean_steadystate_modules, soybean_derivative_modules, soybean_solver_params)`
+## Plotting
+All plotting scripts can be found under the **plotting** folder. Each figure can be reproduced using the respective script as provided. The required model outputs are also included for running these scripts.
 
 
-The code in this repository was developed and tested on Mac OS version 10.14.6, with R version 3.6.1 and Rstudio version 1.2.1335.
-
-
+The code in this repository was developed and tested on Mac OS 12.5 with R 4.2.1 and on CentOS Linux 7 with R 3.6.0.
