@@ -10,8 +10,8 @@ The version of BioCro associated with this manuscript is included as a submodule
 
 ## Running sensitivity experiments with Soybean-BioCro
 - Install Soybean-BioCro. See the [BioCro README](https://github.com/ebimodeling/biocro/tree/5cbccbf9f0832e2a2be0a91a41a3f7048782b3cb#readme) to install BioCro.
-- Run a 10-year sensitivity: To be added
-- Run a 1000-year (bootstrap) sensitivity: To be added
+- Run a 10-year sensitivity: **running/SoybeanBioCro-Sensitivity.R**
+- Run a 1000-year (bootstrap) sensitivity: **running/SoybeanBioCro-Sensitivity_Bootstrap.R**
 
 ## Plotting
 All plotting scripts can be found under the **plotting** folder. Each figure can be reproduced using the respective script as provided. The required model outputs are also included for running these scripts.
