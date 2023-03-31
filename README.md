@@ -4,6 +4,8 @@ The code in this repository reproduces the results in [He & Matthews (2023)](htt
 
 There are two main parts of the code: 1) Running Soybean-BioCro to generate model outputs; and 2) Plotting using the model outputs. There are some figures that were generated using Matlab regarding the leaf-level FvCB model, which is much easier to run since it needs only a few Matlab files.
 
+The 10-year climate data from 2006-2015 at Bondville, IL are provided here. For more information on the data preparation, please refer to the original Soybean-BioCro paper in [Matthews et al (2022)](https://doi.org/10.1093/insilicoplants/diab032).
+
 The version of BioCro associated with this manuscript is included as a submodule in this repository. To clone this repository with the submodule using the following command:
 
 `git clone --recurse-submodules https://github.com/cropsinsilico/Soybean-Sensitivity.git`
