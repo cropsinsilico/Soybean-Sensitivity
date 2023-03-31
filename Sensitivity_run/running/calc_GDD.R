@@ -1,3 +1,4 @@
+#this is a gdd calculation that is the same as in the Soybean-BioCro
 pow <- function(x,y) return(x^y)
 tempFunc<-function(Temp,  Tmin,  Topt,  Tmax){
 
